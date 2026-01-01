@@ -1,67 +1,75 @@
-# Schedules-Direct-Script-
-Python Script for use with SchedulesDirect.com and Jellyfin 
+Buy a Paramedic a coffee (or a line of code!) 
 
-🛰️ Schedules Direct to Jellyfin XMLTV Optimizer
-An automated EPG (Electronic Program Guide) processor designed to bridge the Schedules Direct JSON API and Jellyfin Live TV. Optimized for Unraid users, this script aggregates multiple channel lineups, enriches program metadata, and generates a structured guide.xml for seamless channel mapping.
+"Hi there! By day (and often by night), I’m a paramedic working on the front lines. When I’m not on the road, I’m at my desk diving into the world of computer science. It’s my favorite way to decompress after a long shift.
 
-🌟 Key Features
-Multi-Lineup Aggregation: Automatically detects and merges all lineups associated with your Schedules Direct account (e.g., Local OTA, Cable, and Satellite) into a single XML file.
+Your support helps keep me caffeinated for those 24-hour shifts and contributes to my learning journey in tech. Whether it's a 'thank you' for my service or just a shared love for clean code, I truly appreciate the support!"
+Getting the family to adopt Jellyfin and Plex instead of paying for TV has been hard for me. They want it to be easy to use and always work.
 
-Jellyfin-Specific Metadata: * XMLTV_NS Support: Converts Gracenote metadata into the xmltv_ns format required by Jellyfin for proper Season/Episode grouping.
+<script type="text/javascript" src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js" data-name="bmc-button" data-slug="yourditchdoc" data-color="#FFDD00" data-emoji="☕"  data-font="Arial" data-text="Buy a Paramedic a coffee." data-outline-color="#000000" data-font-color="#000000" data-coffee-color="#ffffff" ></script>
 
-High-Res Descriptions: Prioritizes 1000-character descriptions for rich program details.
+With JellyFin being broken when working with schedules direct I tried dockers and all sorts of stuff, but running a nextPVR docker just for guide data didnt make sense to me. I created this script over a week with what free time I had.
 
-Automated IDs: Uses stable StationID keys to prevent guide "shifting" when channel names change.
+🛰️This is my Schedules Direct to Jellyfin EPG Optimizer
+An automated Electronic Program Guide (EPG) tool built for Unraid users. This script pulls data from the Schedules Direct JSON API, merges multiple lineups (OTA, Cable, Satellite), and formats the output into a rich XMLTV file optimized for Jellyfin Live TV.
 
-Unraid Integration: Built to run via the User Scripts plugin with automatic permission handling (chmod 0666) to avoid Docker "Access Denied" errors.
+🚀 Key Features
+Multi-Lineup Support: Aggregates all channels from all lineups on your SD account.
 
-Efficient Batching: Uses chunked API requests (500 stations/5000 programs) to prevent timeouts and respect API rate limits.
+Auto-Mapping Fix: Injects virtual channel numbers (e.g., 4.1, 4.3) into <display-name> tags to ensure Jellyfin automatically links channels to your tuner.
 
-🏗️ How It Works
-The script executes a six-stage pipeline to ensure data integrity:
+Metadata Rich: Includes high-resolution icons, long-form descriptions, and xmltv_ns season/episode formatting.
 
-Auth: Negotiates a SHA1-hashed token with the Schedules Direct API.
+Jellyfin API Trigger: Automatically tells Jellyfin to refresh its guide as soon as the download finishes.
 
-Discovery: Iterates through every lineup assigned to the user account.
+Progress Tracking: Provides real-time visual feedback in 5% increments during execution.
 
-De-duplication: Maps unique stations to a master dictionary to prevent duplicate channel entries.
+🛠️ Configuration
+Before running the script, update the variables at the top of the file:
 
-Schedule Sync: Pulls 14 days of airing data in batches.
+USER_NAME & PASSWORD: Your Schedules Direct credentials.
 
-Metadata Enrichment: Fetches specific episode titles, descriptions, and air dates.
+OUTPUT_DIR: The folder on Unraid where the XML will be saved (default: /mnt/user/appdata/schedulesdirect).
 
-XML Transformation: Generates the final XMLTV file with Jellyfin-friendly formatting.
+JELLYFIN_URL: Your Unraid server's local IP and port (e.g., http://192.168.1.50:8096).
 
-🛠️ Installation & Setup
-1. Requirements
+JELLYFIN_API_KEY: Generate this in Jellyfin under Dashboard > API Keys.
 
-Python 3.x
+📂 Unraid Setup Instructions (User Scripts)
+To automate your guide updates, use the User Scripts plugin on Unraid.
 
-requests library (pip install requests)
+1. Create the Script
 
-2. Configuration
+Go to your Unraid WebGUI -> Settings -> User Scripts.
 
-***** Update the following variables within the script: *****
+Click Add New Script and name it Update-Jellyfin-EPG.
 
-Python
-USER_NAME = 'your_username'
-PASSWORD  = 'YOURPASSWORD'
-OUTPUT_DIR = "/mnt/user/appdata/schedulesdirect"
+Click the gear icon next to the new script and select Edit Script.
 
-3. Unraid Automation
-Install the User Scripts plugin.
-Create a new script (e.g., Fetch-EPG).
-Paste the script content and save.
-Set the schedule to Daily (e.g., 0 3 * * * for 3 AM).
+Paste the entire Python script into the window and click Save Changes.
+
+2. Set the Schedule
+
+Change the schedule dropdown from "Manual" to Daily.
+
+It is recommended to run this early in the morning (e.g., 3:00 AM) so your guide is fresh every day.
 
 📺 Jellyfin Integration
-To connect the output to Jellyfin:
+1. Docker Path Mapping
 
-Path Mapping: Ensure your Jellyfin Docker template maps the Unraid path /mnt/user/appdata/schedulesdirect to an internal container path like /data/guide.
+Ensure your Jellyfin Docker container can see the folder where the script saves the XML.
 
-Add Provider: Go to Dashboard > Live TV > Guide Data Providers and add an XMLTV provider.
+Host Path: /mnt/user/appdata/schedulesdirect
 
-Mapping: Use the Map Channels tool. Because this script provides the StationID and Callsign, Jellyfin will auto-match most channels.
+Container Path: /data/guide (or similar)
 
-📜 License
-Distributed under the MIT License. See LICENSE for more information.
+2. Add Guide Provider
+
+Open Jellyfin Dashboard > Live TV.
+
+Under TV Guide Data Providers, click "+".
+
+Select XMLTV.
+
+Enter the container path to your file: /data/guide/guide.xml.
+
+Refresh the guide data. Because this script includes the subchannel numbers in the metadata, Jellyfin should auto-map your channels immediately.
