@@ -14,7 +14,7 @@ PASSWORD = 'password'
 
 BASE_URL = 'https://json.schedulesdirect.org/20141201'
 OUTPUT_DIR = "/mnt/user/appdata/schedulesdirect"
-OUTPUT_FILE = f"{OUTPUT_DIR}/evo2guide.xml"
+OUTPUT_FILE = f"{OUTPUT_DIR}/schedulesdirect-4-jellyfin-guide.xml"
 
 # --- Configuration: Jellyfin API ---
 JELLYFIN_URL = 'http://192.168.0.8:8096'  # Change to your Unraid IP
