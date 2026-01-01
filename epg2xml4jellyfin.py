@@ -14,7 +14,7 @@ PASSWORD = 'password'
 
 BASE_URL = 'https://json.schedulesdirect.org/20141201'
 OUTPUT_DIR = "/mnt/user/appdata/schedulesdirect"
-OUTPUT_FILE = f"{OUTPUT_DIR}/evo2guide.xml"
+OUTPUT_FILE = f"{OUTPUT_DIR}/schedulesdirect.xml"
 
 # --- Configuration: Jellyfin API ---
 # Ensure there is NO trailing slash at the end of the URL
