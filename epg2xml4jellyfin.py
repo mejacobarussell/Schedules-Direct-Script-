@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
 # --- Configuration: Schedules Direct ---
-USER_NAME = 'username'
+USER_NAME = 'mrjacobarussell'
 PASSWORD = 'YOURPASSWORD' 
 BASE_URL = 'https://json.schedulesdirect.org/20141201'
 OUTPUT_DIR = "/mnt/user/appdata/schedulesdirect"
