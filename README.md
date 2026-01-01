@@ -7,7 +7,7 @@ Getting the family to adopt Jellyfin and Plex instead of paying for TV has been 
 
 <a href="https://www.buymeacoffee.com/yourditchdoc" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
-With JellyFin being broken when working with schedules direct I tried dockers and all sorts of stuff, but running a nextPVR docker just for guide data didnt make sense to me. I created this script over a week with what free time I had.
+With JellyFin being broken when working with schedulesdirect.com, I tried dockers and all sorts of stuff, but running a nextPVR docker just for guide data didnt make sense to me. I created this script over a week with what free time I had.
 
 🛰️This is my Schedules Direct to Jellyfin EPG Optimizer
 An automated Electronic Program Guide (EPG) tool built for Unraid users. This script pulls data from the Schedules Direct JSON API, merges multiple lineups (OTA, Cable, Satellite), and formats the output into a rich XMLTV file optimized for Jellyfin Live TV.
