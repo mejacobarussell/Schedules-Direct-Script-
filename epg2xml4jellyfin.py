@@ -9,16 +9,16 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
 # --- Configuration: Schedules Direct ---
-USER_NAME = 'user'
-PASSWORD = 'YOURPASSWORD' 
+USER_NAME = 'username'
+PASSWORD = 'REPLACEME_WITH_NEW_PASSWORD' 
 BASE_URL = 'https://json.schedulesdirect.org/20141201'
 OUTPUT_DIR = "/mnt/user/appdata/schedulesdirect"
 OUTPUT_FILE = f"{OUTPUT_DIR}/guide.xml"
 
 # --- Configuration: Jellyfin API ---
-JELLYFIN_URL = 'http://192.168.1.XXX:8096'  # Change to your Unraid IP
+JELLYFIN_URL = 'http://192.168.1.XXX:8096' 
 JELLYFIN_API_KEY = 'YOUR_JELLYFIN_API_KEY'
-TRIGGER_JELLYFIN = True 
+TRIGGER_JELLYFIN = False 
 
 def lprint(text):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {text}", flush=True)
@@ -85,11 +85,8 @@ def main():
         l_id = entry['lineup']
         lprint(f"Fetching mapping for: {l_id}")
         
-        # Pulling the map specifically to get channel numbers (4.1, 4.3, etc)
         m_res = requests.get(f"{BASE_URL}/lineups/{l_id}", headers=headers).json()
         
-        # Create a lookup for the virtual channel numbers
-        # Some lineups use 'channel', some use 'atscMajor'/'atscMinor'
         map_lookup = {}
         for m in m_res.get('map', []):
             sid = m['stationID']
@@ -130,11 +127,9 @@ def main():
     
     for s_id, s_info in master_stations_map.items():
         ch = ET.SubElement(root, "channel", id=s_id)
-        
         num = s_info.get('display_number', '')
         call = s_info.get('callsign', '')
 
-        # Add "4.3" as the first display name so Jellyfin can auto-match
         if num:
             ET.SubElement(ch, "display-name").text = str(num)
             ET.SubElement(ch, "display-name").text = f"{num} {call}"
@@ -150,7 +145,6 @@ def main():
         for p in s_map.get('programs', []):
             details = programs_data.get(p['programID'], {})
             
-            # Start/Stop times
             start_dt = datetime.strptime(p['airDateTime'].replace("Z","").split(".")[0], "%Y-%m-%dT%H:%M:%S")
             stop_dt = start_dt + timedelta(seconds=p.get('duration', 0))
             
@@ -159,14 +153,25 @@ def main():
                                  stop=stop_dt.strftime("%Y%m%d%H%M%S +0000"),
                                  channel=xml_id)
             
+            # --- NEW/REPEAT LOGIC ---
+            # 'new' is true if first run. 'liveTapeDelay' covers Live events.
+            if p.get('new') or p.get('liveTapeDelay') == "Live":
+                ET.SubElement(prog, "new")
+            else:
+                # Tells Jellyfin explicitly this is a repeat
+                ET.SubElement(prog, "previously-shown")
+
             ET.SubElement(prog, "title").text = details.get('titles', [{}])[0].get('title120', 'No Title')
             
             # Description
             desc_text = ""
             if 'descriptions' in details:
                 d = details['descriptions']
-                desc_text = (d.get('description1000') or d.get('description100') or [{}])[0].get('description', '')
-            if desc_text: ET.SubElement(prog, "desc").text = desc_text
+                desc_list = d.get('description1000') or d.get('description100')
+                if desc_list:
+                    desc_text = desc_list[0].get('description', '')
+            if desc_text: 
+                ET.SubElement(prog, "desc").text = desc_text
 
             # Season/Episode
             if 'metadata' in details:
@@ -174,6 +179,7 @@ def main():
                     if 'Gracenote' in meta:
                         s_n, e_n = meta['Gracenote'].get('season'), meta['Gracenote'].get('episode')
                         if s_n and e_n:
+                            # XMLTV_NS is 0-indexed, so S01E01 is 0.0.0/1
                             ET.SubElement(prog, "episode-num", system="xmltv_ns").text = f"{int(s_n)-1}.{int(e_n)-1}.0/1"
 
     # 6. Save
