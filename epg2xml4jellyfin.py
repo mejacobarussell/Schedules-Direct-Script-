@@ -1,5 +1,10 @@
 #!/usr/bin/python3
-
+#
+# Developed by Jacob Russell Free ot use and modify to fit your needs.
+# Pleaselook at toggles section and enable disable as needed.
+# this is version 3.0
+#
+#
 import requests
 import hashlib
 import os
@@ -7,20 +12,22 @@ import time
 import sys
 import shutil
 import random
+import json
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
-
+#
 # --- Configuration ---
-USER_NAME = 'username'
+USER_NAME = 'user name'
 PASSWORD = 'password' 
 BASE_URL = 'https://json.schedulesdirect.org/20141201'
 OUTPUT_DIR = "/mnt/user/appdata/schedulesdirect"
 OUTPUT_FILE = f"{OUTPUT_DIR}/guide.xml"
 LOGO_DIR = f"{OUTPUT_DIR}/logos"
-
+#
 # --- Toggles ---
 DEBUG = True       # Set to False to hide granular details
-TEST_MODE = True   # Set to True to only process 1 random channel for speed
+TEST_MODE = False  # Set to True to only process 1 random channel for speed
+SAVE_JSON = False  # Set to False to stop saving raw .json files to disk where xml is stored.
 TRIGGER_JELLYFIN = False 
 JELLYFIN_URL = 'http://192.168.1.XXX:8096' 
 JELLYFIN_API_KEY = 'YOUR_API_KEY'
@@ -87,13 +94,12 @@ def main():
             s['display_number'] = map_lookup.get(sid, '')
             master_stations_map[sid] = s
 
-    # --- TEST MODE LOGIC: Pick a random channel ---
+    # Pick a random channel for TEST_MODE
     station_ids = list(master_stations_map.keys())
     if TEST_MODE and station_ids:
         random_sid = random.choice(station_ids)
         lprint(f"Test Mode: Picked {master_stations_map[random_sid].get('callsign')} (ID: {random_sid})")
         station_ids = [random_sid]
-        # Trim the map to only include this one station
         master_stations_map = {random_sid: master_stations_map[random_sid]}
 
     # 2. Get Schedules
@@ -104,6 +110,11 @@ def main():
         sched_res = requests.post(f"{BASE_URL}/schedules", headers=headers, json=batch)
         if sched_res.status_code == 200:
             schedules_raw.extend(sched_res.json())
+
+    if SAVE_JSON:
+        with open(f"{OUTPUT_DIR}/raw_schedules.json", "w") as f:
+            json.dump(schedules_raw, f, indent=4)
+        lprint("Saved raw_schedules.json to disk.", is_debug=True)
 
     # 3. Fetch Metadata
     all_prog_ids = list(set(p['programID'] for s in schedules_raw for p in s.get('programs', [])))
@@ -116,11 +127,16 @@ def main():
             for p in prog_res.json():
                 programs_data[p['programID']] = p
 
+    if SAVE_JSON:
+        with open(f"{OUTPUT_DIR}/raw_programs.json", "w") as f:
+            json.dump(list(programs_data.values()), f, indent=4)
+        lprint("Saved raw_programs.json to disk.", is_debug=True)
+
     # 4. Build XMLTV
-    lprint("Building XMLTV structure...", is_debug=True)
-    root = ET.Element("tv", {"generator-info-name": "Jellyfin-Test-Logic"})
+    lprint("Building XMLTV structure...")
+    root = ET.Element("tv", {"generator-info-name": "Jellyfin-Full-Clean"})
     
-    # Process Channels
+    # Channels
     for s_id, s_info in master_stations_map.items():
         ch = ET.SubElement(root, "channel", id=s_id)
         if s_info.get('display_number'):
@@ -133,7 +149,6 @@ def main():
             local_name = f"{s_id}.{ext}"
             local_path = os.path.join(LOGO_DIR, local_name)
             if not os.path.exists(local_path):
-                lprint(f"Downloading new logo: {local_name}", is_debug=True)
                 try:
                     r = requests.get(remote_url)
                     with open(local_path, 'wb') as f: f.write(r.content)
@@ -143,7 +158,7 @@ def main():
     today_dt = datetime.now().date()
     today_str = today_dt.strftime("%Y-%m-%d")
 
-    # Process Programs
+    # Programs
     for s_map in schedules_raw:
         xml_id = s_map['stationID']
         for p in s_map.get('programs', []):
@@ -157,9 +172,10 @@ def main():
                                  stop=stop_dt.strftime("%Y%m%d%H%M%S +0000"),
                                  channel=xml_id)
             
-            # Metadata & Series Logic
+            # Series & Repeat Logic
             orig_air_date = details.get('originalAirDate', '')
-            if p.get('new') or orig_air_date == today_str:
+            is_new = p.get('new') or orig_air_date == today_str
+            if is_new:
                 ET.SubElement(prog, "new")
             else:
                 ET.SubElement(prog, "previously-shown", start=orig_air_date.replace("-",""))
