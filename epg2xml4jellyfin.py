@@ -8,113 +8,64 @@ import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
-# --- Configuration: Schedules Direct ---
-USER_NAME = 'username'
-PASSWORD = 'REPLACEME_WITH_NEW_PASSWORD' 
+# --- Configuration ---
+USER_NAME = 'mrjacobarussell'
+PASSWORD = 'Army05803359' 
 BASE_URL = 'https://json.schedulesdirect.org/20141201'
 OUTPUT_DIR = "/mnt/user/appdata/schedulesdirect"
 OUTPUT_FILE = f"{OUTPUT_DIR}/guide.xml"
 
-# --- Configuration: Jellyfin API ---
-JELLYFIN_URL = 'http://192.168.1.XXX:8096' 
-JELLYFIN_API_KEY = 'YOUR_JELLYFIN_API_KEY'
-TRIGGER_JELLYFIN = False 
-
 def lprint(text):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {text}", flush=True)
-
-def show_progress(label, duration=1):
-    sys.stdout.write(f"[{datetime.now().strftime('%H:%M:%S')}] {label}: ")
-    for i in range(0, 105, 5):
-        sys.stdout.write(f"{i}% ")
-        sys.stdout.flush()
-        time.sleep(duration / 20)
-    sys.stdout.write(" - Complete!\n")
-
-os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def get_token():
     password_hash = hashlib.sha1(PASSWORD.encode('utf-8')).hexdigest()
     try:
         res = requests.post(f"{BASE_URL}/token", json={"username": USER_NAME, "password": password_hash})
-        res.raise_for_status()
         data = res.json()
-        if data.get('code') == 0:
-            return data.get('token')
-        else:
-            lprint(f"API Error: {data.get('message')}")
-            return None
-    except Exception as e:
-        lprint(f"Auth failed: {e}")
+        return data.get('token') if data.get('code') == 0 else None
+    except:
         return None
 
 def format_xmltv_date(date_str):
     clean = date_str.replace("-","").replace(":","").replace("T","").replace("Z","").split(".")[0]
     return f"{clean} +0000"
 
-def trigger_jellyfin_refresh():
-    if not TRIGGER_JELLYFIN: return
-    refresh_url = f"{JELLYFIN_URL}/ScheduledTasks/Running/RefreshGuide"
-    headers = {"X-Emby-Token": JELLYFIN_API_KEY}
-    try:
-        lprint("Triggering Jellyfin Guide Refresh...")
-        requests.post(refresh_url, headers=headers, timeout=10)
-        lprint("Jellyfin refresh task signaled.")
-    except Exception as e:
-        lprint(f"Error connecting to Jellyfin: {e}")
-
 def main():
-    lprint("--- Starting Multi-Lineup EPG Download ---")
+    lprint("--- Starting Enhanced Series Guide Update ---")
+    
+    if os.path.exists(OUTPUT_FILE):
+        os.remove(OUTPUT_FILE)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
     token = get_token()
-    if not token: 
-        lprint("Could not obtain token. Exiting.")
-        return
+    if not token: return
     headers = {'token': token}
 
     # 1. Fetch Lineups
-    lineups_res = requests.get(f"{BASE_URL}/lineups", headers=headers)
-    lineups_data = lineups_res.json()
-    
-    if 'lineups' not in lineups_data:
-        lprint(f"Error fetching lineups: {lineups_data}")
-        return
-
-    # 2. Collect Stations & Mapping Numbers
+    lineups_res = requests.get(f"{BASE_URL}/lineups", headers=headers).json()
     master_stations_map = {}
-    for entry in lineups_data.get('lineups', []):
+    for entry in lineups_res.get('lineups', []):
         l_id = entry['lineup']
-        lprint(f"Fetching mapping for: {l_id}")
-        
         m_res = requests.get(f"{BASE_URL}/lineups/{l_id}", headers=headers).json()
-        
-        map_lookup = {}
-        for m in m_res.get('map', []):
-            sid = m['stationID']
-            if 'atscMajor' in m and 'atscMinor' in m:
-                map_lookup[sid] = f"{m['atscMajor']}.{m['atscMinor']}"
-            else:
-                map_lookup[sid] = m.get('channel')
-        
+        map_lookup = {m['stationID']: (f"{m['atscMajor']}.{m['atscMinor']}" if 'atscMajor' in m else m.get('channel')) for m in m_res.get('map', [])}
         for s in m_res.get('stations', []):
             sid = s['stationID']
-            s['display_number'] = map_lookup.get(sid, s.get('channel', ''))
+            s['display_number'] = map_lookup.get(sid, '')
             master_stations_map[sid] = s
 
-    # 3. Get Schedules
+    # 2. Get Schedules
     station_ids = list(master_stations_map.keys())
     schedules_raw = []
-    lprint(f"Requesting schedules for {len(station_ids)} stations...")
     for i in range(0, len(station_ids), 500):
         batch = [{"stationID": sid} for sid in station_ids[i:i+500]]
         sched_res = requests.post(f"{BASE_URL}/schedules", headers=headers, json=batch)
         if sched_res.status_code == 200:
             schedules_raw.extend(sched_res.json())
 
-    # 4. Fetch Metadata
+    # 3. Fetch Metadata
     all_prog_ids = list(set(p['programID'] for s in schedules_raw for p in s.get('programs', [])))
     programs_data = {}
-    show_progress(f"Downloading Metadata for {len(all_prog_ids)} programs", duration=2)
-    
     for i in range(0, len(all_prog_ids), 5000):
         batch = all_prog_ids[i:i+5000]
         prog_res = requests.post(f"{BASE_URL}/programs", headers=headers, json=batch)
@@ -122,28 +73,25 @@ def main():
             for p in prog_res.json():
                 programs_data[p['programID']] = p
 
-    # 5. Build XMLTV
-    root = ET.Element("tv", {"generator-info-name": "Jellyfin-Full-Auto"})
+    # 4. Build XMLTV
+    root = ET.Element("tv", {"generator-info-name": "Jellyfin-Series-Logic"})
     
+    # Channels
     for s_id, s_info in master_stations_map.items():
         ch = ET.SubElement(root, "channel", id=s_id)
-        num = s_info.get('display_number', '')
-        call = s_info.get('callsign', '')
-
-        if num:
-            ET.SubElement(ch, "display-name").text = str(num)
-            ET.SubElement(ch, "display-name").text = f"{num} {call}"
-        
-        ET.SubElement(ch, "display-name").text = call
-
+        if s_info.get('display_number'):
+            ET.SubElement(ch, "display-name").text = str(s_info['display_number'])
+        ET.SubElement(ch, "display-name").text = s_info.get('callsign', '')
         if 'logo' in s_info: 
             ET.SubElement(ch, "icon", src=s_info['logo']['URL'])
 
-    # Build Programmes
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
     for s_map in schedules_raw:
         xml_id = s_map['stationID']
         for p in s_map.get('programs', []):
-            details = programs_data.get(p['programID'], {})
+            prog_id = p['programID']
+            details = programs_data.get(prog_id, {})
             
             start_dt = datetime.strptime(p['airDateTime'].replace("Z","").split(".")[0], "%Y-%m-%dT%H:%M:%S")
             stop_dt = start_dt + timedelta(seconds=p.get('duration', 0))
@@ -154,43 +102,58 @@ def main():
                                  channel=xml_id)
             
             # --- NEW/REPEAT LOGIC ---
-            # 'new' is true if first run. 'liveTapeDelay' covers Live events.
-            if p.get('new') or p.get('liveTapeDelay') == "Live":
+            orig_air_date = details.get('originalAirDate', '')
+            is_new = p.get('new') or p.get('liveTapeDelay') == "Live" or orig_air_date == today_str
+            
+            if is_new:
                 ET.SubElement(prog, "new")
             else:
-                # Tells Jellyfin explicitly this is a repeat
                 ET.SubElement(prog, "previously-shown")
 
             ET.SubElement(prog, "title").text = details.get('titles', [{}])[0].get('title120', 'No Title')
-            
-            # Description
-            desc_text = ""
-            if 'descriptions' in details:
-                d = details['descriptions']
-                desc_list = d.get('description1000') or d.get('description100')
-                if desc_list:
-                    desc_text = desc_list[0].get('description', '')
-            if desc_text: 
-                ET.SubElement(prog, "desc").text = desc_text
+            if details.get('episodeTitle150'):
+                ET.SubElement(prog, "sub-title").text = details['episodeTitle150']
 
-            # Season/Episode
+            # --- FORCING SERIES RECORDING SUPPORT ---
+            # 1. Provide a consistent Series-ID (first 10 chars of SHID)
+            series_id = prog_id[:10]
+            ET.SubElement(prog, "series-id", system="gracenote").text = series_id
+            
+            # 2. Provide a Unique-ID for the specific episode
+            ET.SubElement(prog, "unique-id", type="gracenote").text = prog_id
+            
+            # 3. Add Category 'Series' explicitly
+            genres = details.get('genres', [])
+            if "Series" not in genres:
+                genres.append("Series")
+            for g in genres:
+                ET.SubElement(prog, "category").text = g
+
+            # 4. The "Episode-Num" Logic (Crucial for the Record Series Button)
+            has_se_metadata = False
             if 'metadata' in details:
                 for meta in details['metadata']:
                     if 'Gracenote' in meta:
                         s_n, e_n = meta['Gracenote'].get('season'), meta['Gracenote'].get('episode')
                         if s_n and e_n:
-                            # XMLTV_NS is 0-indexed, so S01E01 is 0.0.0/1
+                            # Standard SxxExx format
                             ET.SubElement(prog, "episode-num", system="xmltv_ns").text = f"{int(s_n)-1}.{int(e_n)-1}.0/1"
+                            has_se_metadata = True
 
-    # 6. Save
-    show_progress("Finalizing XML and setting permissions", duration=1)
+            # If it's a series (starts with SH) but has no season info (like News), 
+            # we add a placeholder to trigger Jellyfin's Series Mode.
+            if not has_se_metadata and prog_id.startswith("SH"):
+                ET.SubElement(prog, "episode-num", system="xmltv_ns").text = ". ."
+
+            # Add the raw ID as a secondary episode-num system
+            ET.SubElement(prog, "episode-num", system="dd_progid").text = prog_id
+
+    # 5. Save
     tree = ET.ElementTree(root)
     with open(OUTPUT_FILE, "wb") as f:
         tree.write(f, encoding='utf-8', xml_declaration=True)
-    
-    os.chmod(OUTPUT_FILE, 0o666) 
-    lprint(f"--- SUCCESS: Guide saved to {OUTPUT_FILE} ---")
-    trigger_jellyfin_refresh()
+    os.chmod(OUTPUT_FILE, 0o666)
+    lprint(f"--- SUCCESS: Created {OUTPUT_FILE} ---")
 
 if __name__ == "__main__":
     main()
