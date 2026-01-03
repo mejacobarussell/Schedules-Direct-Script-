@@ -15,7 +15,9 @@ PASSWORD_HASH = "hashed password"
 BASE_URL = "https://json.schedulesdirect.org/20141201"
 OUTPUT_DIR = "/mnt/user/appdata/schedulesdirect"
 XML_OUTPUT = os.path.join(OUTPUT_DIR, "guide.xml")
-USER_AGENT = "JellyfinEPGGrabberV3.0/Unraid" # Updated name
+USER_AGENT = "JellyfinEPGGrabberV3.0/Unraid"
+#by mejacobarussell 
+#downloaded from https://github.com/mejacobarussell/Schedules-Direct-Script/edit/main/JellyfinEPGGrabber3.0.py
 DAYS_TO_FETCH = 7 # Increased to 7 days
 VERBOSE = True 
 
