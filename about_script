@@ -1,0 +1,74 @@
+Standard EPG data often lacks the specific metadata required by the Emby and Jellyfin DVR engines to function correctly. This script was engineered to solve three specific points of failure:
+
+The "Record Series" Bug: Emby and Jellyfin often hide the "Record Series" button if a show (like local news) doesn't have a clear Season/Episode number.
+
+The "Repeat" Glitch: Daily news programs are often incorrectly flagged as repeats by metadata providers, causing DVRs to skip recordings.
+
+Auto-Mapping Failure: Most XMLTV grabbers use internal database IDs (StationIDs) as channel identifiers. This script uses Virtual Channel Numbers (e.g., 4.1, 8.2) to ensure the server automatically pairs the guide with your tuner.
+
+2. Logic Flow and Architecture
+
+A. Authentication & API Interaction
+
+The script communicates with the Schedules Direct JSON API (20141201). Instead of sending your password in plain text, it uses a SHA1 Hash.
+
+Token Management: It requests a temporary session token at the start of every run, ensuring secure and authorized access to the lineup.
+
+Batch Processing: Metadata is fetched in chunks of 5,000 programs to stay within API limits and maximize speed.
+
+B. Channel Mapping Engine
+
+This is the most critical part of the script for "zero-configuration" setups.
+
+It pulls the map object from your Schedules Direct lineup.
+
+It looks for atscMajor and atscMinor values (the "Virtual" channel number your antenna actually uses).
+
+It sets the channel id in the XML to this number (e.g., 4.1).
+
+Result: When you add the XML to Jellyfin, it sees "4.1" and your tuner says "4.1"—they pair instantly.
+
+C. The "Emby Fix" Metadata Engine
+
+To force the "Record Series" button to appear, the script manipulates every program entry:
+
+Category Forcing: Every program that is not a movie (ID starts with MV) is automatically assigned the <category>Series</category> and <category>tvshow</category> tags.
+
+News Optimization: If "News" is in the title, the script forces the <new/> tag. This prevents your DVR from seeing a news broadcast as a "Repeat" and skipping it.
+
+D. Date-Based Episode Numbering (xmltv_ns & onscreen)
+
+Since daily shows don't have Season numbers, the script generates "Fake" metadata that Jellyfin understands:
+
+Year as Season: The year (2026) becomes the Season.
+
+Month/Day as Episode: The date (0103) becomes the Episode number.
+
+System xmltv_ns: It follows the strict Season.Episode.Part format (zero-based).
+
+System onscreen: It follows the standard SxxExx string format.
+
+3. File System & Permissions (Unraid Specific)
+
+Because this script runs on Unraid, the output file must be accessible by Docker containers (which usually run as user nobody).
+
+Directory Creation: Automatically creates the output folder if it doesn't exist.
+
+Chown Logic: Uses the Python pwd and grp modules to change ownership to nobody:users.
+
+Chmod Logic: Applies 777 permissions (-rwxrwxrwx) to the guide.xml file.
+
+4. Technical Specifications Summary
+
+Feature	Logic Applied
+Language	Python 3
+Dependencies	requests (Self-installing)
+API Target	Schedules Direct JSON API
+Output Format	XMLTV (Standard-compliant)
+Permission Mask	0o777 (Global Read/Write)
+Ownership	99:100 (nobody:users)
+5. Deployment Recommendation
+
+For the best experience, the script should be scheduled in Unraid User Scripts to run once every 24 hours. This ensures the 14-day rolling window of guide data is always populated, giving the DVR enough lead time to handle schedule changes.
+
+Next Step: Would you like me to add a "How to contribute" section to the documentation in case you want to share this on a public repository?
